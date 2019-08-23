@@ -2083,6 +2083,11 @@ func (b *PlanBuilder) buildSelect(ctx context.Context, sel *ast.SelectStmt) (p L
 
 	hasAgg := b.detectSelectAgg(sel)
 	if hasAgg {
+		// for _, field := range sel.Fields.Fields {
+		// 	if sf, ok := field.Expr.(*expression.ScalarFunction); ok {
+
+		// 	}
+		// }
 		aggFuncs, totalMap = b.extractAggFuncs(sel.Fields.Fields)
 		var aggIndexMap map[int]int
 		p, aggIndexMap, err = b.buildAggregation(ctx, p, aggFuncs, gbyCols)

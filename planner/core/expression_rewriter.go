@@ -1035,6 +1035,7 @@ func (er *expressionRewriter) binaryOpToExpression(v *ast.BinaryOperationExpr) {
 	case opcode.EQ, opcode.NE, opcode.NullEQ, opcode.GT, opcode.GE, opcode.LT, opcode.LE:
 		function, er.err = er.constructBinaryOpFunction(er.ctxStack[stkLen-2], er.ctxStack[stkLen-1],
 			v.Op.String())
+
 	default:
 		lLen := expression.GetRowLen(er.ctxStack[stkLen-2])
 		rLen := expression.GetRowLen(er.ctxStack[stkLen-1])

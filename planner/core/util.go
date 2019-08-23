@@ -24,6 +24,9 @@ type AggregateFuncExtractor struct {
 	inAggregateFuncExpr bool
 	// AggFuncs is the collected AggregateFuncExprs.
 	AggFuncs []*ast.AggregateFuncExpr
+	ctxStack []ast.Node
+	signMap  []bool
+	minus    bool
 }
 
 // Enter implements Visitor interface.
@@ -43,6 +46,9 @@ func (a *AggregateFuncExtractor) Leave(n ast.Node) (ast.Node, bool) {
 	case *ast.AggregateFuncExpr:
 		a.inAggregateFuncExpr = false
 		a.AggFuncs = append(a.AggFuncs, v)
+	case *ast.BinaryOperationExpr:
+		_ = a.AggFuncs[len(a.AggFuncs)-1]
+	case *ast.ParenthesesExpr:
 	}
 	return n, true
 }
