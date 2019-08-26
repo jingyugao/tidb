@@ -1810,7 +1810,7 @@ func (b *PlanBuilder) buildSelectPlanOfInsert(ctx context.Context, insert *ast.I
 	if err != nil {
 		return err
 	}
-
+	// todo
 	// schema4NewRow is the schema for the newly created data record based on
 	// the result of the select statement.
 	schema4NewRow := expression.NewSchema(make([]*expression.Column, len(insertPlan.Table.Cols()))...)

@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/kv"
@@ -202,6 +201,7 @@ func (e *InsertExec) doDupRowUpdate(ctx context.Context, handle int64, oldRow []
 	// See http://dev.mysql.com/doc/refman/5.7/en/miscellaneous-functions.html#function_values
 	e.ctx.GetSessionVars().CurrInsertValues = chunk.MutRowFromDatums(newRow).ToRow()
 
+	// todo
 	// NOTE: In order to execute the expression inside the column assignment,
 	// we have to put the value of "oldRow" before "newRow" in "row4Update" to
 	// be consistent with "Schema4OnDuplicate" in the "Insert" PhysicalPlan.
