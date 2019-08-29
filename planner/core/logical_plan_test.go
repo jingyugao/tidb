@@ -200,8 +200,19 @@ func (s *testPlanSuite) TestPredicatePushDown(c *C) {
 			sql:  "select * from t t1 join t t2 on t1.a = t2.a where t2.a = null",
 			best: "Dual->Projection",
 		},
+		{
+			sql:  "select a, b from (select a, b, min(a) over(partition by b) as min_a from t)as tt where a < 10 and b > 10 and b = min_a",
+			best: "DataScan(t)->Projection->Projection->Window(min(test.t.a))->Sel([lt(test.tt.a, 10) eq(test.tt.b, 4_window_3)])->Projection->Projection",
+		},
+		{
+			sql:  "select a, b from (select a, b, c, d, sum(a) over(partition by b, c) as sum_a from t)as tt where b + c > 10 and b in (1, 2) and sum_a > b",
+			best: "DataScan(t)->Projection->Projection->Window(sum(cast(test.t.a)))->Sel([gt(4_window_5, cast(test.tt.b))])->Projection->Projection",
+		},
 	}
-
+	s.Parser.EnableWindowFunc(true)
+	defer func() {
+		s.Parser.EnableWindowFunc(false)
+	}()
 	ctx := context.Background()
 	for ith, ca := range tests {
 		comment := Commentf("for %s", ca.sql)
@@ -1823,7 +1834,7 @@ func (s *testPlanSuite) TestVisitInfo(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is)
+		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
 		builder.ctx.GetSessionVars().HashJoinConcurrency = 1
 		_, err = builder.Build(context.TODO(), stmt)
 		c.Assert(err, IsNil, comment)
@@ -1938,7 +1949,7 @@ func (s *testPlanSuite) TestUnion(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is)
+		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
 		plan, err := builder.Build(ctx, stmt)
 		if tt.err {
 			c.Assert(err, NotNil)
@@ -2067,7 +2078,7 @@ func (s *testPlanSuite) TestTopNPushDown(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is)
+		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
 		p, err := builder.Build(ctx, stmt)
 		c.Assert(err, IsNil)
 		p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))
@@ -2190,7 +2201,7 @@ func (s *testPlanSuite) TestOuterJoinEliminator(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is)
+		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
 		p, err := builder.Build(ctx, stmt)
 		c.Assert(err, IsNil)
 		p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))
@@ -2218,7 +2229,7 @@ func (s *testPlanSuite) TestSelectView(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is)
+		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
 		p, err := builder.Build(ctx, stmt)
 		c.Assert(err, IsNil)
 		p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))
@@ -2503,7 +2514,7 @@ func (s *testPlanSuite) TestWindowFunction(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is)
+		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
 		p, err := builder.Build(ctx, stmt)
 		if err != nil {
 			c.Assert(err.Error(), Equals, tt.result, comment)
@@ -2585,7 +2596,7 @@ func (s *testPlanSuite) TestSkylinePruning(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is)
+		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
 		p, err := builder.Build(ctx, stmt)
 		if err != nil {
 			c.Assert(err.Error(), Equals, tt.result, comment)
@@ -2674,7 +2685,7 @@ func (s *testPlanSuite) TestUpdateEQCond(c *C) {
 		stmt, err := s.ParseOneStmt(tt.sql, "", "")
 		c.Assert(err, IsNil, comment)
 		Preprocess(s.ctx, stmt, s.is)
-		builder := NewPlanBuilder(MockContext(), s.is)
+		builder := NewPlanBuilder(MockContext(), s.is, &BlockHintProcessor{})
 		p, err := builder.Build(ctx, stmt)
 		c.Assert(err, IsNil)
 		p, err = logicalOptimize(ctx, builder.optFlag, p.(LogicalPlan))
