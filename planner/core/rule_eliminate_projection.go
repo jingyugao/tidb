@@ -82,11 +82,20 @@ func doPhysicalProjectionElimination(p PhysicalPlan) PhysicalPlan {
 	}
 
 	proj, isProj := p.(*PhysicalProjection)
-	if !isProj || !canProjectionBeEliminatedStrict(proj) {
-		return p
+	if isProj {
+		if child, ok := proj.Children()[0].(*PhysicalProjection); ok {
+			for i := range proj.Exprs {
+				proj.Exprs[i] = replaceColumnOfExpr(proj.Exprs[i], child)
+			}
+			p.Children()[0] = child.Children()[0]
+		}
 	}
-	child := p.Children()[0]
-	return child
+
+	if isProj && canProjectionBeEliminatedStrict(proj) {
+		return p.Children()[0]
+	}
+
+	return p
 }
 
 // eliminatePhysicalProjection should be called after physical optimization to
@@ -137,14 +146,6 @@ func (pe *projectionEliminater) eliminate(p LogicalPlan, replace map[string]*exp
 		}
 	}
 	p.replaceExprColumns(replace)
-	if isProj {
-		if child, ok := p.Children()[0].(*LogicalProjection); ok {
-			for i := range proj.Exprs {
-				proj.Exprs[i] = replaceColumnOfExpr(proj.Exprs[i], child)
-			}
-			p.Children()[0] = child.Children()[0]
-		}
-	}
 
 	if !(isProj && canEliminate && canProjectionBeEliminatedLoose(proj)) {
 		return p
@@ -156,7 +157,7 @@ func (pe *projectionEliminater) eliminate(p LogicalPlan, replace map[string]*exp
 	return p.Children()[0]
 }
 
-func replaceColumnOfExpr(expr expression.Expression, proj *LogicalProjection) expression.Expression {
+func replaceColumnOfExpr(expr expression.Expression, proj *PhysicalProjection) expression.Expression {
 	switch v := expr.(type) {
 	case *expression.Column:
 		idx := proj.Schema().ColumnIndex(v)

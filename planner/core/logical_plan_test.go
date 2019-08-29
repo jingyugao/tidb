@@ -1280,6 +1280,13 @@ func (s *testPlanSuite) TestColumnPruning(c *C) {
 	}
 }
 
+func (s *testPlanSuite) TestAllocID(c *C) {
+	ctx := MockContext()
+	pA := DataSource{}.Init(ctx)
+	pB := DataSource{}.Init(ctx)
+	c.Assert(pA.id+1, Equals, pB.id)
+}
+
 func (s *testPlanSuite) TestProjectionEliminater(c *C) {
 	defer testleak.AfterTest(c)()
 	tests := []struct {
@@ -1288,7 +1295,7 @@ func (s *testPlanSuite) TestProjectionEliminater(c *C) {
 	}{
 		{
 			sql:  "select 1+num from (select 1+a as num from t) t1;",
-			best: "DataScan(t)->Projection",
+			best: "TableReader(Table(t))->Projection",
 		},
 	}
 
@@ -1300,17 +1307,10 @@ func (s *testPlanSuite) TestProjectionEliminater(c *C) {
 
 		p, err := BuildLogicalPlan(ctx, s.ctx, stmt, s.is)
 		c.Assert(err, IsNil)
-		p, err = logicalOptimize(context.TODO(), flagBuildKeyInfo|flagPrunColumns|flagEliminateProjection, p.(LogicalPlan))
+		p, err = DoOptimize(context.TODO(), flagBuildKeyInfo|flagPrunColumns|flagEliminateProjection, p.(LogicalPlan))
 		c.Assert(err, IsNil)
 		c.Assert(ToString(p), Equals, tt.best, Commentf("for %s %d", tt.sql, ith))
 	}
-}
-
-func (s *testPlanSuite) TestAllocID(c *C) {
-	ctx := MockContext()
-	pA := DataSource{}.Init(ctx)
-	pB := DataSource{}.Init(ctx)
-	c.Assert(pA.id+1, Equals, pB.id)
 }
 
 func checkDataSourceCols(p LogicalPlan, c *C, ans map[int][]string, comment CommentInterface) {
@@ -1608,7 +1608,7 @@ func (s *testPlanSuite) TestAggPrune(c *C) {
 	}{
 		{
 			sql:  "select a, count(b) from t group by a",
-			best: "DataScan(t)->Projection",
+			best: "DataScan(t)->Projection->Projection",
 		},
 		{
 			sql:  "select sum(b) from t group by c, d, e",
@@ -1616,19 +1616,19 @@ func (s *testPlanSuite) TestAggPrune(c *C) {
 		},
 		{
 			sql:  "select tt.a, sum(tt.b) from (select a, b from t) tt group by tt.a",
-			best: "DataScan(t)->Projection",
+			best: "DataScan(t)->Projection->Projection",
 		},
 		{
 			sql:  "select count(1) from (select count(1), a as b from t group by a) tt group by b",
-			best: "DataScan(t)->Projection",
+			best: "DataScan(t)->Projection->Projection",
 		},
 		{
 			sql:  "select a, count(b) from t group by a",
-			best: "DataScan(t)->Projection",
+			best: "DataScan(t)->Projection->Projection",
 		},
 		{
 			sql:  "select a, count(distinct a, b) from t group by a",
-			best: "DataScan(t)->Projection",
+			best: "DataScan(t)->Projection->Projection",
 		},
 	}
 
@@ -1934,12 +1934,12 @@ func (s *testPlanSuite) TestUnion(c *C) {
 		},
 		{
 			sql:  "select * from (select 1 as a  union select 1 union all select 2) t order by a",
-			best: "UnionAll{UnionAll{Dual->Projection->Dual->Projection}->Aggr(firstrow(a))->Projection->Dual->Projection}->Projection->Sort",
+			best: "UnionAll{UnionAll{Dual->Projection->Projection->Dual->Projection->Projection}->Aggr(firstrow(a))->Projection->Dual->Projection->Projection}->Projection->Sort",
 			err:  false,
 		},
 		{
 			sql:  "select * from (select 1 as a  union select 1 union all select 2) t order by (select a)",
-			best: "Apply{UnionAll{UnionAll{Dual->Projection->Dual->Projection}->Aggr(firstrow(a))->Projection->Dual->Projection}->Dual->Projection->MaxOneRow}->Sort->Projection",
+			best: "Apply{UnionAll{UnionAll{Dual->Projection->Projection->Dual->Projection->Projection}->Aggr(firstrow(a))->Projection->Dual->Projection->Projection}->Dual->Projection->MaxOneRow}->Sort->Projection",
 			err:  false,
 		},
 	}
